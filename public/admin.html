@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Signal Admin</title>
+  <link rel="stylesheet" href="/assets/style.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+  <style>
+    body { display: flex; min-height: 100vh; overflow: hidden; }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: var(--sidebar-w); flex-shrink: 0;
+      background: var(--surface); border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      position: fixed; top: 0; left: 0; bottom: 0; z-index: 200;
+      transition: transform .3s;
+    }
+    .sidebar-logo {
+      padding: 24px 20px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; gap: 10px;
+    }
+    .logo-mark-sm {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--indigo), var(--cyan));
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .logo-mark-sm svg { width: 16px; height: 16px; color: #fff; }
+    .logo-text-sm {
+      font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700;
+      background: linear-gradient(90deg, var(--indigo), var(--cyan));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .admin-badge {
+      margin-left: auto; font-size: 10px; font-weight: 600;
+      background: var(--indigo-dim); color: var(--indigo);
+      padding: 2px 8px; border-radius: 20px; letter-spacing: .4px;
+    }
+    .nav { flex: 1; padding: 16px 12px; }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 12px; border-radius: 8px; cursor: pointer;
+      color: var(--text-muted); font-size: 13px; font-weight: 500;
+      transition: all .2s; margin-bottom: 2px; border: none; background: none; width: 100%;
+      text-align: left;
+    }
+    .nav-item svg { width: 18px; height: 18px; flex-shrink: 0; }
+    .nav-item:hover { background: var(--indigo-dim); color: var(--indigo); }
+    .nav-item.active { background: var(--indigo-dim); color: var(--indigo); }
+
+    /* ── Main ── */
+    .main { margin-left: var(--sidebar-w); flex: 1; overflow-y: auto; height: 100vh; padding: 32px; }
+
+    /* ── Section ── */
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* ── Dashboard grid ── */
+    .metrics-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px; }
+    .breakdown-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-bottom: 28px; }
+    .breakdown-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .breakdown-item:last-child { border-bottom: none; }
+    .breakdown-label { font-size: 13px; }
+    .breakdown-val { font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 16px; }
+    .chart-wrap { position: relative; height: 220px; }
+
+    /* ── Segments table ── */
+    .seg-status { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+    .seg-active { background: var(--green); }
+    .seg-inactive { background: var(--text-muted); }
+
+    /* ── Detail grid ── */
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .detail-item label { font-size: 11px; color: var(--text-muted); font-weight: 600; letter-spacing: .4px; text-transform: uppercase; }
+    .detail-item p { margin-top: 4px; font-size: 14px; }
+    .detail-full { grid-column: 1 / -1; }
+
+    /* ── Mobile sidebar ── */
+    .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 150; }
+    .menu-btn { display: none; position: fixed; top: 16px; left: 16px; z-index: 300; width: 38px; height: 38px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; align-items: center; justify-content: center; }
+    .menu-btn svg { width: 18px; height: 18px; color: var(--text); }
+
+    @media (max-width: 768px) {
+      .sidebar { transform: translateX(-100%); }
+      .sidebar.open { transform: translateX(0); }
+      .sidebar-overlay.open { display: block; }
+      .main { margin-left: 0; padding: 24px 16px; padding-top: 70px; }
+      .menu-btn { display: flex; }
+      .metrics-grid { grid-template-columns: 1fr 1fr; }
+      .detail-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Mobile menu button -->
+<button class="menu-btn" id="menuBtn">
+  <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+    <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+  </svg>
+</button>
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<!-- Sidebar -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-mark-sm">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+      </svg>
+    </div>
+    <span class="logo-text-sm">Signal</span>
+    <span class="admin-badge">Admin</span>
+  </div>
+  <nav class="nav">
+    <button class="nav-item active" data-section="dashboard">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.5V19a1 1 0 001 1h5v-5h6v5h5a1 1 0 001-1v-5.5M3 13.5L12 4l9 9.5"/>
+      </svg>
+      Dashboard
+    </button>
+    <button class="nav-item" data-section="registros">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+      </svg>
+      Registros
+    </button>
+    <button class="nav-item" data-section="segmentos">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+      </svg>
+      Segmentos
+    </button>
+    <button class="nav-item" data-section="exportacao">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+      </svg>
+      Exportação
+    </button>
+  </nav>
+</aside>
+
+<!-- Main content -->
+<main class="main">
+
+  <!-- ── Dashboard ── -->
+  <section class="section active" id="section-dashboard">
+    <h2 class="section-title">Dashboard <span class="section-subtitle">Visão geral da operação</span></h2>
+    <div class="metrics-grid" id="metricsGrid"></div>
+    <div class="breakdown-grid">
+      <div class="card">
+        <h4 style="font-size:13px;color:var(--text-muted);margin-bottom:14px;text-transform:uppercase;letter-spacing:.5px">Por tipo</h4>
+        <div id="breakdownTipo"></div>
+      </div>
+      <div class="card">
+        <h4 style="font-size:13px;color:var(--text-muted);margin-bottom:14px;text-transform:uppercase;letter-spacing:.5px">Por impacto</h4>
+        <div id="breakdownImpacto"></div>
+      </div>
+      <div class="card">
+        <h4 style="font-size:13px;color:var(--text-muted);margin-bottom:14px;text-transform:uppercase;letter-spacing:.5px">Por status</h4>
+        <div id="breakdownStatus"></div>
+      </div>
+      <div class="card">
+        <h4 style="font-size:13px;color:var(--text-muted);margin-bottom:14px;text-transform:uppercase;letter-spacing:.5px">Por segmento</h4>
+        <div id="breakdownSegmento"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h4 style="font-size:13px;color:var(--text-muted);margin-bottom:14px;text-transform:uppercase;letter-spacing:.5px">Registros por dia (últimos 30 dias)</h4>
+      <div class="chart-wrap"><canvas id="chartSerie"></canvas></div>
+    </div>
+  </section>
+
+  <!-- ── Registros ── -->
+  <section class="section" id="section-registros">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+      <h2 class="section-title" style="margin:0">Registros</h2>
+      <button class="btn btn-ghost btn-sm" id="btnExportFiltered">
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+        Exportar CSV
+      </button>
+    </div>
+
+    <!-- Filters -->
+    <div class="filter-bar">
+      <button class="filter-toggle" id="filterToggle">
+        <span>Filtros</span>
+        <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" id="filterChevron"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+      </button>
+      <div class="filter-body" id="filterBody">
+        <div class="filter-grid">
+          <div>
+            <label>Segmento</label>
+            <select class="select" id="fSegmento"><option value="">Todos</option></select>
+          </div>
+          <div>
+            <label>Tipo</label>
+            <select class="select" id="fTipo">
+              <option value="">Todos</option>
+              <option value="melhoria">Sugestão de melhoria</option>
+              <option value="impacto">Problema/impacto</option>
+              <option value="erro_sistema">Erro de sistema</option>
+              <option value="outro">Outro</option>
+            </select>
+          </div>
+          <div>
+            <label>Impacto</label>
+            <select class="select" id="fImpacto">
+              <option value="">Todos</option>
+              <option value="baixo">Baixo</option>
+              <option value="medio">Médio</option>
+              <option value="alto">Alto</option>
+            </select>
+          </div>
+          <div>
+            <label>Status</label>
+            <select class="select" id="fStatus">
+              <option value="">Todos</option>
+              <option value="novo">Novo</option>
+              <option value="lido">Lido</option>
+              <option value="em_analise">Em análise</option>
+              <option value="implementado">Implementado</option>
+              <option value="descartado">Descartado</option>
+            </select>
+          </div>
+          <div>
+            <label>Data início</label>
+            <input type="date" class="input" id="fDataInicio"/>
+          </div>
+          <div>
+            <label>Data fim</label>
+            <input type="date" class="input" id="fDataFim"/>
+          </div>
+        </div>
+        <div class="filter-actions">
+          <input type="text" class="input" id="fBusca" placeholder="Buscar por título ou descrição..." style="max-width:280px"/>
+          <button class="btn btn-primary btn-sm" id="btnFiltrar">Filtrar</button>
+          <button class="btn btn-ghost btn-sm" id="btnLimparFiltros">Limpar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:0">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Data/hora</th>
+              <th>Atendente</th>
+              <th>Matrícula</th>
+              <th>Segmento</th>
+              <th>Tipo</th>
+              <th>Título</th>
+              <th>Impacto</th>
+              <th>Status</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="registrosBody"></tbody>
+        </table>
+      </div>
+      <div style="padding:16px 20px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <span id="registrosCount" style="font-size:12px;color:var(--text-muted)"></span>
+        <div class="pagination" id="pagination"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Segmentos ── -->
+  <section class="section" id="section-segmentos">
+    <h2 class="section-title">Segmentos</h2>
+    <div style="display:grid;grid-template-columns:1fr 320px;gap:24px;align-items:start" id="segGrid">
+      <div class="card" style="padding:0">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);font-weight:600;font-size:14px">Segmentos cadastrados</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Descrição</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="segmentosBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" id="segFormCard">
+        <h4 style="font-size:14px;font-weight:600;margin-bottom:20px">Novo segmento</h4>
+        <form id="segForm">
+          <div class="field">
+            <label>Nome *</label>
+            <input type="text" class="input" id="segNome" maxlength="100" placeholder="Nome do segmento" required/>
+          </div>
+          <div class="field">
+            <label>Descrição</label>
+            <textarea class="textarea" id="segDesc" maxlength="300" rows="3" placeholder="Descrição opcional"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%">Adicionar segmento</button>
+        </form>
+      </div>
+    </div>
+    <style>
+      @media (max-width: 768px) { #segGrid { grid-template-columns: 1fr; } }
+    </style>
+  </section>
+
+  <!-- ── Exportação ── -->
+  <section class="section" id="section-exportacao">
+    <h2 class="section-title">Exportação</h2>
+    <div style="display:grid;gap:16px;max-width:560px">
+      <div class="card">
+        <h4 style="font-size:15px;font-weight:600;margin-bottom:8px">Exportar todos os registros</h4>
+        <p style="color:var(--text-muted);font-size:13px;margin-bottom:18px">Baixa um arquivo CSV com todos os registros cadastrados no sistema.</p>
+        <button class="btn btn-primary" id="btnExportAll">
+          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          Exportar todos
+        </button>
+      </div>
+      <div class="card">
+        <h4 style="font-size:15px;font-weight:600;margin-bottom:8px">Exportar por período</h4>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+          <div class="field" style="margin:0">
+            <label>Data início</label>
+            <input type="date" class="input" id="expDataInicio"/>
+          </div>
+          <div class="field" style="margin:0">
+            <label>Data fim</label>
+            <input type="date" class="input" id="expDataFim"/>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btnExportPeriodo">
+          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          Exportar período
+        </button>
+      </div>
+      <div class="card" style="background:rgba(99,102,241,.05)">
+        <p style="font-size:12px;color:var(--text-muted)">Última exportação</p>
+        <p style="font-size:14px;font-weight:500;margin-top:4px" id="lastExportTime">Nenhuma exportação realizada nesta sessão.</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- Detail Modal -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">Detalhes do registro</h3>
+      <button class="close-btn" id="closeDetailModal">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="detail-grid" id="detailContent"></div>
+    </div>
+    <div class="modal-footer">
+      <select class="select" id="modalStatusSelect" style="max-width:180px">
+        <option value="novo">Novo</option>
+        <option value="lido">Lido</option>
+        <option value="em_analise">Em análise</option>
+        <option value="implementado">Implementado</option>
+        <option value="descartado">Descartado</option>
+      </select>
+      <button class="btn btn-primary" id="btnSaveStatus">Salvar status</button>
+      <button class="btn btn-danger" id="btnDeleteRecord">Excluir</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Modal -->
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <h3 id="confirmTitle">Confirmar ação</h3>
+      <button class="close-btn" id="closeConfirmModal">✕</button>
+    </div>
+    <div class="modal-body">
+      <p id="confirmMsg" style="color:var(--text-muted)"></p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="confirmCancel">Cancelar</button>
+      <button class="btn btn-danger" id="confirmOk">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── Toast ──────────────────────────────────────────────────────────────────────
+function showToast(msg, type = 'success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `show toast-${type}`;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.className = ''; }, 3500);
+}
+
+// ── Confirm dialog ────────────────────────────────────────────────────────────
+function showConfirm(title, msg) {
+  return new Promise(resolve => {
+    document.getElementById('confirmTitle').textContent = title;
+    document.getElementById('confirmMsg').textContent = msg;
+    const overlay = document.getElementById('confirmModal');
+    overlay.classList.add('open');
+    const ok = document.getElementById('confirmOk');
+    const cancel = document.getElementById('confirmCancel');
+    const close = document.getElementById('closeConfirmModal');
+    function cleanup(val) {
+      overlay.classList.remove('open');
+      ok.removeEventListener('click', onOk);
+      cancel.removeEventListener('click', onCancel);
+      close.removeEventListener('click', onCancel);
+      resolve(val);
+    }
+    function onOk() { cleanup(true); }
+    function onCancel() { cleanup(false); }
+    ok.addEventListener('click', onOk);
+    cancel.addEventListener('click', onCancel);
+    close.addEventListener('click', onCancel);
+  });
+}
+
+// ── Labels ────────────────────────────────────────────────────────────────────
+const TIPO_LABELS = { melhoria:'Sugestão de melhoria', impacto:'Problema/impacto', erro_sistema:'Erro de sistema', outro:'Outro' };
+const IMPACTO_LABELS = { baixo:'Baixo', medio:'Médio', alto:'Alto' };
+const STATUS_LABELS = { novo:'Novo', lido:'Lido', em_analise:'Em análise', implementado:'Implementado', descartado:'Descartado' };
+
+function fmtDate(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+// ── Sidebar navigation ────────────────────────────────────────────────────────
+document.querySelectorAll('.nav-item').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    btn.classList.add('active');
+    const sec = btn.dataset.section;
+    document.getElementById(`section-${sec}`).classList.add('active');
+    closeSidebar();
+    if (sec === 'dashboard') loadDashboard();
+    if (sec === 'registros') { currentPage = 1; loadRegistros(); loadSegmentosFilter(); }
+    if (sec === 'segmentos') loadSegmentos();
+  });
+});
+
+// Mobile sidebar
+const sidebar = document.getElementById('sidebar');
+const sidebarOverlay = document.getElementById('sidebarOverlay');
+document.getElementById('menuBtn').addEventListener('click', () => {
+  sidebar.classList.add('open');
+  sidebarOverlay.classList.add('open');
+});
+function closeSidebar() {
+  sidebar.classList.remove('open');
+  sidebarOverlay.classList.remove('open');
+}
+sidebarOverlay.addEventListener('click', closeSidebar);
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+let chartInstance = null;
+
+async function loadDashboard() {
+  try {
+    const res = await fetch('/api/dashboard');
+    const d = await res.json();
+
+    // Metrics
+    const grid = document.getElementById('metricsGrid');
+    grid.innerHTML = `
+      ${metricCard('Total de registros', d.total, iconDoc())}
+      ${metricCard('Alto impacto', (d.porImpacto.find(x=>x.impacto==='alto')||{total:0}).total, iconAlert(), 'var(--red)')}
+      ${metricCard('Em análise', (d.porStatus.find(x=>x.status==='em_analise')||{total:0}).total, iconClock(), 'var(--yellow)')}
+      ${metricCard('Implementados', (d.porStatus.find(x=>x.status==='implementado')||{total:0}).total, iconCheck(), 'var(--green)')}
+    `;
+
+    // Breakdowns
+    document.getElementById('breakdownTipo').innerHTML = d.porTipo.map(r =>
+      `<div class="breakdown-item"><span class="breakdown-label">${TIPO_LABELS[r.tipo]||r.tipo}</span><span class="breakdown-val">${r.total}</span></div>`
+    ).join('') || '<p style="color:var(--text-muted);font-size:13px">Sem dados</p>';
+
+    document.getElementById('breakdownImpacto').innerHTML = d.porImpacto.map(r =>
+      `<div class="breakdown-item"><span class="breakdown-label"><span class="badge badge-${r.impacto}">${IMPACTO_LABELS[r.impacto]||r.impacto}</span></span><span class="breakdown-val">${r.total}</span></div>`
+    ).join('') || '<p style="color:var(--text-muted);font-size:13px">Sem dados</p>';
+
+    document.getElementById('breakdownStatus').innerHTML = d.porStatus.map(r =>
+      `<div class="breakdown-item"><span class="breakdown-label"><span class="badge badge-${r.status}">${STATUS_LABELS[r.status]||r.status}</span></span><span class="breakdown-val">${r.total}</span></div>`
+    ).join('') || '<p style="color:var(--text-muted);font-size:13px">Sem dados</p>';
+
+    document.getElementById('breakdownSegmento').innerHTML = d.porSegmento.slice(0, 6).map(r =>
+      `<div class="breakdown-item"><span class="breakdown-label">${r.segmento}</span><span class="breakdown-val">${r.total}</span></div>`
+    ).join('') || '<p style="color:var(--text-muted);font-size:13px">Sem dados</p>';
+
+    // Chart
+    buildChart(d.serie);
+  } catch (err) {
+    showToast('Erro ao carregar dashboard', 'error');
+  }
+}
+
+function buildChart(serie) {
+  // Fill all 30 days
+  const days = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(); d.setDate(d.getDate() - i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  const dataMap = Object.fromEntries(serie.map(r => [r.dia, r.total]));
+  const values = days.map(d => dataMap[d] || 0);
+  const labels = days.map(d => d.slice(5));
+
+  if (chartInstance) chartInstance.destroy();
+  const ctx = document.getElementById('chartSerie').getContext('2d');
+  chartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: 'rgba(99,102,241,.5)',
+        borderColor: '#6366f1',
+        borderWidth: 1,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#7878a0', font: { size: 10 }, maxRotation: 45 }, grid: { color: 'rgba(255,255,255,.05)' } },
+        y: { ticks: { color: '#7878a0', font: { size: 10 }, precision: 0 }, grid: { color: 'rgba(255,255,255,.05)' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+function metricCard(label, value, icon, color = 'var(--indigo)') {
+  return `<div class="metric-card">
+    <div class="metric-icon" style="background:${color}22">${icon.replace('currentColor', color)}</div>
+    <div><div class="metric-value">${value}</div><div class="metric-label">${label}</div></div>
+  </div>`;
+}
+
+function iconDoc() { return `<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" width="22" height="22"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>`; }
+function iconAlert() { return `<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" width="22" height="22"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>`; }
+function iconClock() { return `<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" width="22" height="22"><circle cx="12" cy="12" r="10"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2"/></svg>`; }
+function iconCheck() { return `<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" width="22" height="22"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`; }
+
+// ── Registros ─────────────────────────────────────────────────────────────────
+let currentPage = 1;
+const PAGE_LIMIT = 20;
+let currentFilters = {};
+let activeRecordId = null;
+
+async function loadSegmentosFilter() {
+  const sel = document.getElementById('fSegmento');
+  if (sel.children.length > 1) return;
+  const res = await fetch('/api/segmentos/all');
+  const data = await res.json();
+  data.forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.id; o.textContent = s.nome;
+    sel.appendChild(o);
+  });
+}
+
+function getFilters() {
+  return {
+    segmento: document.getElementById('fSegmento').value,
+    tipo: document.getElementById('fTipo').value,
+    impacto: document.getElementById('fImpacto').value,
+    status: document.getElementById('fStatus').value,
+    data_inicio: document.getElementById('fDataInicio').value,
+    data_fim: document.getElementById('fDataFim').value,
+    busca: document.getElementById('fBusca').value.trim(),
+  };
+}
+
+async function loadRegistros(page = currentPage) {
+  currentPage = page;
+  const f = currentFilters;
+  const params = new URLSearchParams({ page, limit: PAGE_LIMIT });
+  Object.entries(f).forEach(([k, v]) => { if (v) params.set(k, v); });
+
+  try {
+    const res = await fetch('/api/registros?' + params);
+    const d = await res.json();
+
+    const tbody = document.getElementById('registrosBody');
+    if (!d.data.length) {
+      tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--text-muted);padding:40px">Nenhum registro encontrado</td></tr>`;
+    } else {
+      tbody.innerHTML = d.data.map(r => `
+        <tr style="cursor:pointer" data-id="${r.id}">
+          <td style="white-space:nowrap;font-size:12px">${fmtDate(r.criado_em)}</td>
+          <td>${r.atendente}</td>
+          <td style="color:var(--text-muted)">${r.matricula}</td>
+          <td>${r.segmento_nome}</td>
+          <td style="white-space:nowrap">${TIPO_LABELS[r.tipo]||r.tipo}</td>
+          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r.titulo}">${r.titulo}</td>
+          <td><span class="badge badge-${r.impacto}">${IMPACTO_LABELS[r.impacto]||r.impacto}</span></td>
+          <td><span class="badge badge-${r.status}">${STATUS_LABELS[r.status]||r.status}</span></td>
+          <td><button class="btn btn-ghost btn-sm" data-id="${r.id}">Ver</button></td>
+        </tr>
+      `).join('');
+
+      tbody.querySelectorAll('tr').forEach(tr => {
+        tr.addEventListener('click', (e) => {
+          if (e.target.tagName === 'BUTTON') return;
+          openDetail(Number(tr.dataset.id));
+        });
+      });
+      tbody.querySelectorAll('button[data-id]').forEach(btn => {
+        btn.addEventListener('click', () => openDetail(Number(btn.dataset.id)));
+      });
+    }
+
+    document.getElementById('registrosCount').textContent = `${d.total} registro(s) encontrado(s)`;
+    renderPagination(d.pages, page);
+  } catch (err) {
+    showToast('Erro ao carregar registros', 'error');
+  }
+}
+
+function renderPagination(pages, current) {
+  const el = document.getElementById('pagination');
+  if (pages <= 1) { el.innerHTML = ''; return; }
+
+  let html = `<button class="page-btn" ${current===1?'disabled':''} data-page="${current-1}">&#8592;</button>`;
+  const range = new Set([1, pages, current, current-1, current+1].filter(p => p >= 1 && p <= pages));
+  const sorted = [...range].sort((a,b) => a-b);
+  let prev = null;
+  sorted.forEach(p => {
+    if (prev && p - prev > 1) html += `<span class="page-info">…</span>`;
+    html += `<button class="page-btn ${p===current?'active':''}" data-page="${p}">${p}</button>`;
+    prev = p;
+  });
+  html += `<button class="page-btn" ${current===pages?'disabled':''} data-page="${current+1}">&#8594;</button>`;
+  el.innerHTML = html;
+  el.querySelectorAll('button[data-page]').forEach(btn => {
+    btn.addEventListener('click', () => loadRegistros(Number(btn.dataset.page)));
+  });
+}
+
+document.getElementById('btnFiltrar').addEventListener('click', () => {
+  currentFilters = getFilters();
+  loadRegistros(1);
+});
+document.getElementById('btnLimparFiltros').addEventListener('click', () => {
+  ['fSegmento','fTipo','fImpacto','fStatus'].forEach(id => { document.getElementById(id).value = ''; });
+  ['fDataInicio','fDataFim','fBusca'].forEach(id => { document.getElementById(id).value = ''; });
+  currentFilters = {};
+  loadRegistros(1);
+});
+
+// Filter toggle
+document.getElementById('filterToggle').addEventListener('click', () => {
+  const body = document.getElementById('filterBody');
+  const chevron = document.getElementById('filterChevron');
+  body.classList.toggle('open');
+  chevron.style.transform = body.classList.contains('open') ? 'rotate(180deg)' : '';
+});
+
+// Export filtered
+document.getElementById('btnExportFiltered').addEventListener('click', () => {
+  const params = new URLSearchParams();
+  Object.entries(currentFilters).forEach(([k, v]) => { if (v) params.set(k, v); });
+  triggerDownload('/api/registros/export/csv?' + params);
+});
+
+// ── Detail Modal ──────────────────────────────────────────────────────────────
+async function openDetail(id) {
+  activeRecordId = id;
+  try {
+    const res = await fetch(`/api/registros/${id}`);
+    const r = await res.json();
+
+    document.getElementById('modalTitle').textContent = r.titulo;
+    document.getElementById('modalStatusSelect').value = r.status;
+
+    document.getElementById('detailContent').innerHTML = `
+      <div class="detail-item"><label>ID</label><p>#${r.id}</p></div>
+      <div class="detail-item"><label>Data/hora</label><p>${fmtDate(r.criado_em)}</p></div>
+      <div class="detail-item"><label>Atendente</label><p>${r.atendente}</p></div>
+      <div class="detail-item"><label>Matrícula</label><p>${r.matricula}</p></div>
+      <div class="detail-item"><label>Segmento</label><p>${r.segmento_nome}</p></div>
+      <div class="detail-item"><label>Tipo</label><p>${TIPO_LABELS[r.tipo]||r.tipo}</p></div>
+      <div class="detail-item"><label>Impacto</label><p><span class="badge badge-${r.impacto}">${IMPACTO_LABELS[r.impacto]||r.impacto}</span></p></div>
+      <div class="detail-item"><label>Status</label><p><span class="badge badge-${r.status}">${STATUS_LABELS[r.status]||r.status}</span></p></div>
+      <div class="detail-item detail-full"><label>Título</label><p>${r.titulo}</p></div>
+      <div class="detail-item detail-full"><label>Descrição</label><p style="white-space:pre-wrap">${r.descricao}</p></div>
+      ${r.sugestao ? `<div class="detail-item detail-full"><label>Sugestão de solução</label><p style="white-space:pre-wrap">${r.sugestao}</p></div>` : ''}
+      <div class="detail-item"><label>Atualizado em</label><p>${fmtDate(r.atualizado_em)}</p></div>
+    `;
+
+    document.getElementById('detailModal').classList.add('open');
+  } catch {
+    showToast('Erro ao carregar registro', 'error');
+  }
+}
+
+document.getElementById('closeDetailModal').addEventListener('click', () => {
+  document.getElementById('detailModal').classList.remove('open');
+});
+document.getElementById('detailModal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
+});
+
+document.getElementById('btnSaveStatus').addEventListener('click', async () => {
+  const status = document.getElementById('modalStatusSelect').value;
+  try {
+    const res = await fetch(`/api/registros/${activeRecordId}/status`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    if (!res.ok) throw new Error();
+    showToast('Status atualizado');
+    document.getElementById('detailModal').classList.remove('open');
+    loadRegistros(currentPage);
+  } catch {
+    showToast('Erro ao atualizar status', 'error');
+  }
+});
+
+document.getElementById('btnDeleteRecord').addEventListener('click', async () => {
+  const ok = await showConfirm('Excluir registro', 'Tem certeza que deseja excluir este registro? Esta ação não pode ser desfeita.');
+  if (!ok) return;
+  try {
+    const res = await fetch(`/api/registros/${activeRecordId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error();
+    showToast('Registro excluído');
+    document.getElementById('detailModal').classList.remove('open');
+    loadRegistros(currentPage);
+  } catch {
+    showToast('Erro ao excluir', 'error');
+  }
+});
+
+// ── Segmentos ─────────────────────────────────────────────────────────────────
+async function loadSegmentos() {
+  try {
+    const res = await fetch('/api/segmentos/all');
+    const data = await res.json();
+    const tbody = document.getElementById('segmentosBody');
+    if (!data.length) {
+      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:30px">Nenhum segmento</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = data.map(s => `
+      <tr>
+        <td><strong>${s.nome}</strong></td>
+        <td style="color:var(--text-muted);font-size:13px">${s.descricao || '—'}</td>
+        <td>
+          <span class="seg-status ${s.ativo ? 'seg-active' : 'seg-inactive'}"></span>
+          ${s.ativo ? 'Ativo' : 'Inativo'}
+        </td>
+        <td>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" data-seg-toggle="${s.id}" data-ativo="${s.ativo}">${s.ativo ? 'Desativar' : 'Ativar'}</button>
+            <button class="btn btn-danger btn-sm" data-seg-delete="${s.id}">Excluir</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('[data-seg-toggle]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.segToggle;
+        const ativo = Number(btn.dataset.ativo) === 1 ? 0 : 1;
+        const res = await fetch(`/api/segmentos/${id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ativo }),
+        });
+        if (res.ok) { showToast(`Segmento ${ativo ? 'ativado' : 'desativado'}`); loadSegmentos(); }
+        else showToast('Erro ao atualizar', 'error');
+      });
+    });
+
+    tbody.querySelectorAll('[data-seg-delete]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const ok = await showConfirm('Excluir segmento', 'Tem certeza? Segmentos com registros vinculados não podem ser excluídos.');
+        if (!ok) return;
+        const res = await fetch(`/api/segmentos/${btn.dataset.segDelete}`, { method: 'DELETE' });
+        const body = await res.json();
+        if (res.ok) { showToast('Segmento excluído'); loadSegmentos(); }
+        else showToast(body.error || 'Erro ao excluir', 'error');
+      });
+    });
+  } catch {
+    showToast('Erro ao carregar segmentos', 'error');
+  }
+}
+
+document.getElementById('segForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const nome = document.getElementById('segNome').value.trim();
+  const descricao = document.getElementById('segDesc').value.trim();
+  if (!nome) return showToast('Nome é obrigatório', 'error');
+  try {
+    const res = await fetch('/api/segmentos', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nome, descricao }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error);
+    showToast('Segmento adicionado');
+    document.getElementById('segNome').value = '';
+    document.getElementById('segDesc').value = '';
+    loadSegmentos();
+  } catch (err) {
+    showToast(err.message || 'Erro ao adicionar', 'error');
+  }
+});
+
+// ── Exportação ────────────────────────────────────────────────────────────────
+function triggerDownload(url) {
+  const a = document.createElement('a');
+  a.href = url; a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  document.getElementById('lastExportTime').textContent = new Date().toLocaleString('pt-BR');
+}
+
+document.getElementById('btnExportAll').addEventListener('click', () => {
+  triggerDownload('/api/registros/export/csv');
+});
+
+document.getElementById('btnExportPeriodo').addEventListener('click', () => {
+  const di = document.getElementById('expDataInicio').value;
+  const df = document.getElementById('expDataFim').value;
+  const params = new URLSearchParams();
+  if (di) params.set('data_inicio', di);
+  if (df) params.set('data_fim', df);
+  triggerDownload('/api/registros/export/csv?' + params);
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadDashboard();
+</script>
+</body>
+</html>

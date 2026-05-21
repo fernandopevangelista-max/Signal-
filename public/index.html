@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Signal — Registre seu sinal</title>
+  <link rel="stylesheet" href="/assets/style.css" />
+  <style>
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 40px 20px 60px;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    /* Grid pattern background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(99,102,241,.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(99,102,241,.06) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Radial glow */
+    body::after {
+      content: '';
+      position: fixed;
+      top: -200px; left: 50%; transform: translateX(-50%);
+      width: 800px; height: 500px;
+      background: radial-gradient(ellipse, rgba(99,102,241,.12) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative; z-index: 1;
+      width: 100%; max-width: 640px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+
+    .logo {
+      display: inline-flex; align-items: center; gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .logo-mark {
+      width: 42px; height: 42px;
+      background: linear-gradient(135deg, var(--indigo), var(--cyan));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    .logo-mark svg { width: 22px; height: 22px; color: #fff; }
+
+    .logo-text {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 28px; font-weight: 700;
+      background: linear-gradient(90deg, var(--indigo), var(--cyan));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+
+    .tagline { color: var(--text-muted); font-size: 14px; }
+
+    .form-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 36px;
+    }
+
+    .form-title {
+      font-size: 17px; font-weight: 600;
+      margin-bottom: 28px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: .2px;
+      border-radius: var(--radius);
+      border: none; cursor: pointer;
+      background: linear-gradient(135deg, var(--indigo), var(--cyan));
+      color: #fff;
+      transition: all .3s;
+      margin-top: 8px;
+    }
+    .submit-btn:hover { box-shadow: 0 0 28px rgba(99,102,241,.45); transform: translateY(-2px); }
+    .submit-btn:active { transform: translateY(0); }
+    .submit-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+    /* Success state */
+    .success-overlay {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 40px 20px;
+    }
+    .success-overlay.show { display: flex; }
+
+    .checkmark-circle {
+      width: 80px; height: 80px;
+      border-radius: 50%;
+      background: rgba(52,211,153,.1);
+      border: 2px solid var(--green);
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 24px;
+      animation: pop .4s cubic-bezier(.175,.885,.32,1.275);
+    }
+
+    @keyframes pop {
+      from { transform: scale(0); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .checkmark-circle svg { width: 38px; height: 38px; color: var(--green); }
+
+    .success-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 22px; font-weight: 700;
+      margin-bottom: 8px;
+    }
+
+    .success-sub { color: var(--text-muted); font-size: 14px; margin-bottom: 28px; }
+
+    .form-section { display: block; }
+
+    .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    @media (max-width: 520px) {
+      .form-card { padding: 24px 18px; }
+      .row-2 { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div class="logo">
+        <div class="logo-mark">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+        </div>
+        <span class="logo-text">Signal</span>
+      </div>
+      <p class="tagline">Sua voz move a operação</p>
+    </header>
+
+    <div class="form-card">
+      <div class="form-section" id="formSection">
+        <h2 class="form-title">Novo registro</h2>
+        <form id="signalForm" novalidate>
+
+          <div class="row-2">
+            <div class="field">
+              <label for="atendente">Nome do atendente *</label>
+              <input id="atendente" name="atendente" type="text" class="input" placeholder="Seu nome completo" required maxlength="100" />
+            </div>
+            <div class="field">
+              <label for="matricula">Matrícula *</label>
+              <input id="matricula" name="matricula" type="text" class="input" placeholder="Ex: 00123456" required maxlength="50" />
+            </div>
+          </div>
+
+          <div class="row-2">
+            <div class="field">
+              <label for="segmento">Segmento *</label>
+              <select id="segmento" name="segmento_id" class="select" required>
+                <option value="">Carregando...</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="tipo">Tipo de registro *</label>
+              <select id="tipo" name="tipo" class="select" required>
+                <option value="">Selecione</option>
+                <option value="melhoria">Sugestão de melhoria de processo</option>
+                <option value="impacto">Problema/impacto no dia</option>
+                <option value="erro_sistema">Erro de sistema/ferramenta</option>
+                <option value="outro">Outro</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label for="titulo">Título *</label>
+            <input id="titulo" name="titulo" type="text" class="input" placeholder="Resumo em uma frase" required maxlength="100" />
+            <div class="char-counter"><span id="tituloCount">0</span>/100</div>
+          </div>
+
+          <div class="field">
+            <label for="descricao">Descrição detalhada *</label>
+            <textarea id="descricao" name="descricao" class="textarea" placeholder="Descreva com detalhes o que aconteceu, quando e qual o impacto." required maxlength="1000" rows="5"></textarea>
+            <div class="char-counter"><span id="descricaoCount">0</span>/1000</div>
+          </div>
+
+          <div class="field">
+            <label for="sugestao">Sugestão de solução <span style="font-weight:400;color:var(--text-muted)">(opcional)</span></label>
+            <textarea id="sugestao" name="sugestao" class="textarea" placeholder="Se tiver uma ideia de como resolver, compartilhe." maxlength="500" rows="3"></textarea>
+            <div class="char-counter"><span id="sugestaoCount">0</span>/500</div>
+          </div>
+
+          <div class="field">
+            <label>Nível de impacto *</label>
+            <div class="radio-group">
+              <label class="radio-label" data-value="baixo">
+                <input type="radio" name="impacto" value="baixo" />
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+                Baixo
+              </label>
+              <label class="radio-label" data-value="medio">
+                <input type="radio" name="impacto" value="medio" />
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14"/></svg>
+                Médio
+              </label>
+              <label class="radio-label" data-value="alto">
+                <input type="radio" name="impacto" value="alto" />
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                Alto
+              </label>
+            </div>
+          </div>
+
+          <button type="submit" class="submit-btn" id="submitBtn">Enviar sinal</button>
+        </form>
+      </div>
+
+      <div class="success-overlay" id="successOverlay">
+        <div class="checkmark-circle">
+          <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+          </svg>
+        </div>
+        <h2 class="success-title">Sinal enviado!</h2>
+        <p class="success-sub" id="successMsg">Obrigado, seu registro foi recebido.</p>
+        <button class="btn btn-ghost" id="newRecordBtn">Enviar outro registro</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="/assets/app.js"></script>
+</body>
+</html>
