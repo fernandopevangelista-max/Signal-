@@ -25,28 +25,69 @@ db.exec(`
     criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
-  CREATE TABLE IF NOT EXISTS registros (
+  CREATE TABLE IF NOT EXISTS tipos (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    atendente TEXT NOT NULL,
-    matricula TEXT NOT NULL,
-    segmento_id INTEGER NOT NULL REFERENCES segmentos(id),
-    tipo TEXT NOT NULL CHECK(tipo IN ('melhoria','impacto','erro_sistema','outro')),
-    titulo TEXT NOT NULL,
-    descricao TEXT NOT NULL,
-    sugestao TEXT,
-    impacto TEXT NOT NULL CHECK(impacto IN ('baixo','medio','alto')),
-    status TEXT NOT NULL DEFAULT 'novo' CHECK(status IN ('novo','lido','em_analise','implementado','descartado')),
-    criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
-    atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+    nome TEXT NOT NULL UNIQUE,
+    label TEXT NOT NULL,
+    ativo INTEGER DEFAULT 1,
+    criado_em DATETIME DEFAULT CURRENT_TIMESTAMP
   );
-
-  CREATE INDEX IF NOT EXISTS idx_registros_segmento ON registros(segmento_id);
-  CREATE INDEX IF NOT EXISTS idx_registros_tipo ON registros(tipo);
-  CREATE INDEX IF NOT EXISTS idx_registros_status ON registros(status);
-  CREATE INDEX IF NOT EXISTS idx_registros_criado_em ON registros(criado_em);
 `);
 
-// Seed initial segments
+// Migrate registros: remove hardcoded CHECK on tipo if still present
+const regSql = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='registros'").get();
+if (!regSql) {
+  db.exec(`
+    CREATE TABLE registros (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      atendente TEXT NOT NULL,
+      matricula TEXT NOT NULL,
+      segmento_id INTEGER NOT NULL REFERENCES segmentos(id),
+      tipo TEXT NOT NULL,
+      titulo TEXT NOT NULL,
+      descricao TEXT NOT NULL,
+      sugestao TEXT,
+      impacto TEXT NOT NULL CHECK(impacto IN ('baixo','medio','alto')),
+      status TEXT NOT NULL DEFAULT 'novo' CHECK(status IN ('novo','lido','em_analise','implementado','descartado')),
+      criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+      atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_registros_segmento ON registros(segmento_id);
+    CREATE INDEX IF NOT EXISTS idx_registros_tipo ON registros(tipo);
+    CREATE INDEX IF NOT EXISTS idx_registros_status ON registros(status);
+    CREATE INDEX IF NOT EXISTS idx_registros_criado_em ON registros(criado_em);
+  `);
+} else if (regSql.sql.includes("CHECK(tipo IN")) {
+  db.pragma('foreign_keys = OFF');
+  db.transaction(() => {
+    db.exec(`
+      ALTER TABLE registros RENAME TO _registros_bkp;
+      CREATE TABLE registros (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        atendente TEXT NOT NULL,
+        matricula TEXT NOT NULL,
+        segmento_id INTEGER NOT NULL REFERENCES segmentos(id),
+        tipo TEXT NOT NULL,
+        titulo TEXT NOT NULL,
+        descricao TEXT NOT NULL,
+        sugestao TEXT,
+        impacto TEXT NOT NULL CHECK(impacto IN ('baixo','medio','alto')),
+        status TEXT NOT NULL DEFAULT 'novo' CHECK(status IN ('novo','lido','em_analise','implementado','descartado')),
+        criado_em DATETIME DEFAULT CURRENT_TIMESTAMP,
+        atualizado_em DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO registros SELECT * FROM _registros_bkp;
+      DROP TABLE _registros_bkp;
+      CREATE INDEX IF NOT EXISTS idx_registros_segmento ON registros(segmento_id);
+      CREATE INDEX IF NOT EXISTS idx_registros_tipo ON registros(tipo);
+      CREATE INDEX IF NOT EXISTS idx_registros_status ON registros(status);
+      CREATE INDEX IF NOT EXISTS idx_registros_criado_em ON registros(criado_em);
+    `);
+  })();
+  db.pragma('foreign_keys = ON');
+}
+
+// Seed segments
 const countSegs = db.prepare('SELECT COUNT(*) as c FROM segmentos').get();
 if (countSegs.c === 0) {
   const insertSeg = db.prepare('INSERT INTO segmentos (nome, descricao) VALUES (?, ?)');
@@ -58,6 +99,18 @@ if (countSegs.c === 0) {
     ['Corporativo', 'Atendimento Corporativo'],
   ];
   seedSegments.forEach(([nome, descricao]) => insertSeg.run(nome, descricao));
+}
+
+// Seed tipos
+const countTipos = db.prepare('SELECT COUNT(*) as c FROM tipos').get();
+if (countTipos.c === 0) {
+  const insertTipo = db.prepare('INSERT INTO tipos (nome, label) VALUES (?, ?)');
+  [
+    ['melhoria',     'Sugestão de melhoria de processo'],
+    ['impacto',      'Problema/impacto no dia'],
+    ['erro_sistema', 'Erro de sistema/ferramenta'],
+    ['outro',        'Outro'],
+  ].forEach(([nome, label]) => insertTipo.run(nome, label));
 }
 
 // ── Middleware ────────────────────────────────────────────────────────────────
@@ -158,9 +211,70 @@ app.delete('/api/segmentos/:id', (req, res) => {
   }
 });
 
+// ── API: Tipos ────────────────────────────────────────────────────────────────
+
+app.get('/api/tipos', (req, res) => {
+  try {
+    const rows = db.prepare('SELECT id, nome, label FROM tipos WHERE ativo = 1 ORDER BY id').all();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/tipos/all', (req, res) => {
+  try {
+    const rows = db.prepare('SELECT * FROM tipos ORDER BY id').all();
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/tipos', (req, res) => {
+  try {
+    const label = sanitize(req.body.label, 100);
+    if (!label) return res.status(400).json({ error: 'Label é obrigatório' });
+    const nome = label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '_').slice(0, 50);
+    const result = db.prepare('INSERT INTO tipos (nome, label) VALUES (?, ?)').run(nome, label);
+    res.status(201).json({ id: result.lastInsertRowid, nome, label, ativo: 1 });
+  } catch (err) {
+    if (err.message.includes('UNIQUE')) return res.status(409).json({ error: 'Tipo já existe' });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.patch('/api/tipos/:id', (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const t = db.prepare('SELECT * FROM tipos WHERE id = ?').get(id);
+    if (!t) return res.status(404).json({ error: 'Tipo não encontrado' });
+    const label = req.body.label !== undefined ? sanitize(req.body.label, 100) : t.label;
+    const ativo = req.body.ativo !== undefined ? (req.body.ativo ? 1 : 0) : t.ativo;
+    if (!label) return res.status(400).json({ error: 'Label é obrigatório' });
+    db.prepare('UPDATE tipos SET label = ?, ativo = ? WHERE id = ?').run(label, ativo, id);
+    res.json({ id, nome: t.nome, label, ativo });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.delete('/api/tipos/:id', (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const t = db.prepare('SELECT * FROM tipos WHERE id = ?').get(id);
+    if (!t) return res.status(404).json({ error: 'Tipo não encontrado' });
+    const linked = db.prepare('SELECT COUNT(*) as c FROM registros WHERE tipo = ?').get(t.nome);
+    if (linked.c > 0) return res.status(409).json({ error: 'Tipo possui registros vinculados' });
+    db.prepare('DELETE FROM tipos WHERE id = ?').run(id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── API: Registros ────────────────────────────────────────────────────────────
 
-const TIPOS_VALIDOS = ['melhoria', 'impacto', 'erro_sistema', 'outro'];
 const IMPACTOS_VALIDOS = ['baixo', 'medio', 'alto'];
 
 app.post('/api/registros', (req, res) => {
@@ -178,11 +292,14 @@ app.post('/api/registros', (req, res) => {
     if (!atendente) erros.push('atendente');
     if (!matricula) erros.push('matricula');
     if (!segmento_id) erros.push('segmento_id');
-    if (!TIPOS_VALIDOS.includes(tipo)) erros.push('tipo');
+    if (!tipo) erros.push('tipo');
     if (!titulo) erros.push('titulo');
     if (!descricao) erros.push('descricao');
     if (!IMPACTOS_VALIDOS.includes(impacto)) erros.push('impacto');
     if (erros.length) return res.status(400).json({ error: `Campos inválidos ou ausentes: ${erros.join(', ')}` });
+
+    const tipoValido = db.prepare('SELECT id FROM tipos WHERE nome = ? AND ativo = 1').get(tipo);
+    if (!tipoValido) return res.status(400).json({ error: 'Tipo inválido' });
 
     const seg = db.prepare('SELECT id FROM segmentos WHERE id = ? AND ativo = 1').get(segmento_id);
     if (!seg) return res.status(400).json({ error: 'Segmento inválido' });

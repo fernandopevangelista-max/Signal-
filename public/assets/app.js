@@ -39,7 +39,22 @@ async function loadSegmentos() {
     sel.innerHTML = '<option value="">Erro ao carregar — recarregue a página</option>';
   }
 }
+
+// ── Load tipos ────────────────────────────────────────────────────────────────
+async function loadTipos() {
+  const sel = document.getElementById('tipo');
+  try {
+    const res = await fetch('/api/tipos');
+    const data = await res.json();
+    sel.innerHTML = '<option value="">Selecione</option>' +
+      data.map(t => `<option value="${t.nome}">${t.label}</option>`).join('');
+  } catch {
+    sel.innerHTML = '<option value="">Erro ao carregar — recarregue a página</option>';
+  }
+}
+
 loadSegmentos();
+loadTipos();
 
 // ── Form submit ───────────────────────────────────────────────────────────────
 const form = document.getElementById('signalForm');
@@ -99,4 +114,5 @@ newRecordBtn.addEventListener('click', () => {
   formSection.style.display = '';
   successOverlay.classList.remove('show');
   loadSegmentos();
+  loadTipos();
 });

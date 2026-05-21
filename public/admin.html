@@ -133,6 +133,12 @@
       </svg>
       Segmentos
     </button>
+    <button class="nav-item" data-section="tipos">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/>
+      </svg>
+      Tipos
+    </button>
     <button class="nav-item" data-section="exportacao">
       <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
         <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
@@ -197,13 +203,7 @@
           </div>
           <div>
             <label>Tipo</label>
-            <select class="select" id="fTipo">
-              <option value="">Todos</option>
-              <option value="melhoria">Sugestão de melhoria</option>
-              <option value="impacto">Problema/impacto</option>
-              <option value="erro_sistema">Erro de sistema</option>
-              <option value="outro">Outro</option>
-            </select>
+            <select class="select" id="fTipo"><option value="">Todos</option></select>
           </div>
           <div>
             <label>Impacto</label>
@@ -305,6 +305,42 @@
     </div>
     <style>
       @media (max-width: 768px) { #segGrid { grid-template-columns: 1fr; } }
+    </style>
+  </section>
+
+  <!-- ── Tipos ── -->
+  <section class="section" id="section-tipos">
+    <h2 class="section-title">Tipos de registro</h2>
+    <div style="display:grid;grid-template-columns:1fr 320px;gap:24px;align-items:start" id="tiposGrid">
+      <div class="card" style="padding:0">
+        <div style="padding:16px 20px;border-bottom:1px solid var(--border);font-weight:600;font-size:14px">Tipos cadastrados</div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Label (exibição)</th>
+                <th>Slug interno</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="tiposBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card">
+        <h4 style="font-size:14px;font-weight:600;margin-bottom:20px">Novo tipo</h4>
+        <form id="tipoForm">
+          <div class="field">
+            <label>Nome do tipo *</label>
+            <input type="text" class="input" id="tipoLabel" maxlength="100" placeholder="Ex: Feedback de cliente" required/>
+          </div>
+          <button type="submit" class="btn btn-primary" style="width:100%">Adicionar tipo</button>
+        </form>
+      </div>
+    </div>
+    <style>
+      @media (max-width: 768px) { #tiposGrid { grid-template-columns: 1fr; } }
     </style>
   </section>
 
@@ -425,9 +461,18 @@ function showConfirm(title, msg) {
 }
 
 // ── Labels ────────────────────────────────────────────────────────────────────
-const TIPO_LABELS = { melhoria:'Sugestão de melhoria', impacto:'Problema/impacto', erro_sistema:'Erro de sistema', outro:'Outro' };
+let TIPO_LABELS = {};
 const IMPACTO_LABELS = { baixo:'Baixo', medio:'Médio', alto:'Alto' };
 const STATUS_LABELS = { novo:'Novo', lido:'Lido', em_analise:'Em análise', implementado:'Implementado', descartado:'Descartado' };
+
+async function loadTipoLabels() {
+  try {
+    const res = await fetch('/api/tipos/all');
+    const data = await res.json();
+    TIPO_LABELS = Object.fromEntries(data.map(t => [t.nome, t.label]));
+  } catch {}
+}
+loadTipoLabels();
 
 function fmtDate(d) {
   if (!d) return '—';
@@ -444,8 +489,9 @@ document.querySelectorAll('.nav-item').forEach(btn => {
     document.getElementById(`section-${sec}`).classList.add('active');
     closeSidebar();
     if (sec === 'dashboard') loadDashboard();
-    if (sec === 'registros') { currentPage = 1; loadRegistros(); loadSegmentosFilter(); }
+    if (sec === 'registros') { currentPage = 1; loadRegistros(); loadSegmentosFilter(); loadTiposFilter(); }
     if (sec === 'segmentos') loadSegmentos();
+    if (sec === 'tipos') loadTipos();
   });
 });
 
@@ -565,6 +611,18 @@ async function loadSegmentosFilter() {
   data.forEach(s => {
     const o = document.createElement('option');
     o.value = s.id; o.textContent = s.nome;
+    sel.appendChild(o);
+  });
+}
+
+async function loadTiposFilter() {
+  const sel = document.getElementById('fTipo');
+  sel.innerHTML = '<option value="">Todos</option>';
+  const res = await fetch('/api/tipos/all');
+  const data = await res.json();
+  data.forEach(t => {
+    const o = document.createElement('option');
+    o.value = t.nome; o.textContent = t.label;
     sel.appendChild(o);
   });
 }
@@ -812,6 +870,87 @@ document.getElementById('segForm').addEventListener('submit', async (e) => {
     document.getElementById('segNome').value = '';
     document.getElementById('segDesc').value = '';
     loadSegmentos();
+  } catch (err) {
+    showToast(err.message || 'Erro ao adicionar', 'error');
+  }
+});
+
+// ── Tipos ─────────────────────────────────────────────────────────────────────
+async function loadTipos() {
+  try {
+    const res = await fetch('/api/tipos/all');
+    const data = await res.json();
+    const tbody = document.getElementById('tiposBody');
+    if (!data.length) {
+      tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:30px">Nenhum tipo</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = data.map(t => `
+      <tr>
+        <td><strong>${t.label}</strong></td>
+        <td style="color:var(--text-muted);font-size:12px;font-family:monospace">${t.nome}</td>
+        <td>
+          <span class="seg-status ${t.ativo ? 'seg-active' : 'seg-inactive'}"></span>
+          ${t.ativo ? 'Ativo' : 'Inativo'}
+        </td>
+        <td>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" data-tipo-toggle="${t.id}" data-ativo="${t.ativo}">${t.ativo ? 'Desativar' : 'Ativar'}</button>
+            <button class="btn btn-danger btn-sm" data-tipo-delete="${t.id}">Excluir</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+
+    tbody.querySelectorAll('[data-tipo-toggle]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = btn.dataset.tipoToggle;
+        const ativo = Number(btn.dataset.ativo) === 1 ? 0 : 1;
+        const res = await fetch(`/api/tipos/${id}`, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ativo }),
+        });
+        if (res.ok) {
+          showToast(`Tipo ${ativo ? 'ativado' : 'desativado'}`);
+          await loadTipoLabels();
+          loadTipos();
+        } else showToast('Erro ao atualizar', 'error');
+      });
+    });
+
+    tbody.querySelectorAll('[data-tipo-delete]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const ok = await showConfirm('Excluir tipo', 'Tipos com registros vinculados não podem ser excluídos.');
+        if (!ok) return;
+        const res = await fetch(`/api/tipos/${btn.dataset.tipoDelete}`, { method: 'DELETE' });
+        const body = await res.json();
+        if (res.ok) {
+          showToast('Tipo excluído');
+          await loadTipoLabels();
+          loadTipos();
+        } else showToast(body.error || 'Erro ao excluir', 'error');
+      });
+    });
+  } catch {
+    showToast('Erro ao carregar tipos', 'error');
+  }
+}
+
+document.getElementById('tipoForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const label = document.getElementById('tipoLabel').value.trim();
+  if (!label) return showToast('Nome é obrigatório', 'error');
+  try {
+    const res = await fetch('/api/tipos', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label }),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error);
+    showToast('Tipo adicionado');
+    document.getElementById('tipoLabel').value = '';
+    await loadTipoLabels();
+    loadTipos();
   } catch (err) {
     showToast(err.message || 'Erro ao adicionar', 'error');
   }
