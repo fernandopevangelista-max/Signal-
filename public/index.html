@@ -133,6 +133,28 @@
       .form-card { padding: 24px 18px; }
       .row-2 { grid-template-columns: 1fr; }
     }
+
+    /* ── GooeyText ─────────────────────────────────────────────────────────── */
+    #gooey-wrap {
+      display: flex;
+      justify-content: center;
+      margin: -12px 0 28px;
+      height: 44px;
+      filter: url('#gooey-filter');
+    }
+
+    #gooey-wrap span {
+      position: absolute;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.25rem;
+      font-weight: 600;
+      background: linear-gradient(90deg, var(--indigo), var(--cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      white-space: nowrap;
+      user-select: none;
+    }
   </style>
 </head>
 <body>
@@ -149,6 +171,23 @@
       </div>
       <p class="tagline">Sua voz move a operação</p>
     </header>
+
+    <!-- GooeyText morphing phrases -->
+    <svg style="position:absolute;width:0;height:0" aria-hidden="true">
+      <defs>
+        <filter id="gooey-filter">
+          <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
+          <feColorMatrix in="blur" mode="matrix"
+            values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 255 -140"
+            result="gooey"/>
+          <feComposite in="SourceGraphic" in2="gooey" operator="atop"/>
+        </filter>
+      </defs>
+    </svg>
+    <div id="gooey-wrap">
+      <span id="gooey-t1"></span>
+      <span id="gooey-t2"></span>
+    </div>
 
     <div class="form-card">
       <div class="form-section" id="formSection">
@@ -438,6 +477,82 @@
     }
 
     requestAnimationFrame(frame);
+  })();
+
+  // ── GooeyText morph ───────────────────────────────────────────────────────
+  (function () {
+    const phrases = [
+      'Cada sinal conta',
+      'Registre. Transforme.',
+      'Fale. A gente ouve.',
+      'Sua voz importa',
+      'Sinais viram mudanças',
+      'A operação começa em você',
+    ];
+
+    const t1 = document.getElementById('gooey-t1');
+    const t2 = document.getElementById('gooey-t2');
+
+    const MORPH_DURATION = 1200; // ms
+    const HOLD_DURATION  = 2800; // ms
+
+    let idx      = 0;
+    let morphing = false;
+    let start    = null;
+
+    function setBlur(el, blur, opacity) {
+      el.style.filter  = `blur(${blur}px)`;
+      el.style.opacity = opacity;
+    }
+
+    t1.textContent = phrases[0];
+    t2.textContent = phrases[1];
+    setBlur(t1, 0, 1);
+    setBlur(t2, 8, 0);
+
+    function startMorph(ts) {
+      morphing = true;
+      start    = ts;
+    }
+
+    function animate(ts) {
+      if (!morphing) {
+        requestAnimationFrame(animate);
+        return;
+      }
+
+      const elapsed = ts - start;
+      let p = Math.min(elapsed / MORPH_DURATION, 1);
+      // ease in-out
+      p = p < 0.5 ? 2 * p * p : -1 + (4 - 2 * p) * p;
+
+      setBlur(t1, p * 8,       1 - p);
+      setBlur(t2, (1 - p) * 8, p);
+
+      if (p >= 1) {
+        morphing = false;
+        idx      = (idx + 1) % phrases.length;
+
+        // swap: t1 becomes the visible one, t2 gets the next phrase hidden
+        t1.textContent = phrases[idx];
+        t2.textContent = phrases[(idx + 1) % phrases.length];
+        setBlur(t1, 0, 1);
+        setBlur(t2, 8, 0);
+
+        setTimeout(() => requestAnimationFrame(startMorph), HOLD_DURATION);
+        requestAnimationFrame(animate);
+        return;
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    setTimeout(() => requestAnimationFrame(ts => {
+      startMorph(ts);
+      animate(ts);
+    }), HOLD_DURATION);
+
+    requestAnimationFrame(animate);
   })();
   </script>
 </body>
