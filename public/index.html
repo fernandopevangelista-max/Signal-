@@ -17,32 +17,67 @@
       overflow-x: hidden;
     }
 
-    /* Grid pattern background */
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background-image:
-        linear-gradient(rgba(99,102,241,.06) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(99,102,241,.06) 1px, transparent 1px);
-      background-size: 40px 40px;
-      pointer-events: none;
-      z-index: 0;
-    }
-
-    /* Radial glow */
+    /* Radial mask over boxes */
     body::after {
       content: '';
       position: fixed;
-      top: -200px; left: 50%; transform: translateX(-50%);
-      width: 800px; height: 500px;
-      background: radial-gradient(ellipse, rgba(99,102,241,.12) 0%, transparent 70%);
+      inset: 0;
+      background: radial-gradient(ellipse at center, transparent 30%, var(--bg) 80%);
       pointer-events: none;
+      z-index: 1;
+    }
+
+    /* Background boxes */
+    #bg-boxes {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
       z-index: 0;
+      background: #0d0d14;
+    }
+
+    #bg-boxes-inner {
+      position: absolute;
+      left: 25%;
+      top: -25%;
+      display: flex;
+      transform: translate(-40%, -60%) skewX(-48deg) skewY(14deg) scale(0.675);
+      transform-origin: top left;
+    }
+
+    .bb-row {
+      width: 64px;
+      flex-shrink: 0;
+      border-left: 1px solid #1e293b;
+      position: relative;
+    }
+
+    .bb-cell {
+      width: 64px;
+      height: 32px;
+      border-right: 1px solid #1e293b;
+      border-top: 1px solid #1e293b;
+      position: relative;
+      transition: background-color 0s;
+      box-sizing: border-box;
+    }
+
+    .bb-cell.fading {
+      transition: background-color 1.5s ease;
+    }
+
+    .bb-plus {
+      position: absolute;
+      width: 40px;
+      height: 24px;
+      top: -12px;
+      left: -20px;
+      color: #1e293b;
+      pointer-events: none;
     }
 
     .container {
-      position: relative; z-index: 1;
+      position: relative; z-index: 2;
       width: 100%; max-width: 640px;
     }
 
@@ -151,6 +186,7 @@
   </style>
 </head>
 <body>
+  <div id="bg-boxes"><div id="bg-boxes-inner"></div></div>
   <div class="container">
     <header class="header">
       <div class="logo">
@@ -257,5 +293,56 @@
 
   <div id="toast"></div>
   <script src="/assets/app.js"></script>
+  <script>
+    (function () {
+      const ROWS = 40;
+      const COLS = 70;
+      const COLORS = [
+        'rgb(125,211,252)',
+        'rgb(249,168,212)',
+        'rgb(134,239,172)',
+        'rgb(253,224,71)',
+        'rgb(252,165,165)',
+        'rgb(216,180,254)',
+        'rgb(147,197,253)',
+        'rgb(165,180,252)',
+        'rgb(196,181,253)',
+      ];
+
+      const plus = `<svg class="bb-plus" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m6-6H6"/></svg>`;
+
+      const inner = document.getElementById('bg-boxes-inner');
+      const frag = document.createDocumentFragment();
+
+      for (let i = 0; i < ROWS; i++) {
+        const row = document.createElement('div');
+        row.className = 'bb-row';
+        for (let j = 0; j < COLS; j++) {
+          const cell = document.createElement('div');
+          cell.className = 'bb-cell';
+          if (j % 2 === 0 && i % 2 === 0) cell.innerHTML = plus;
+          row.appendChild(cell);
+        }
+        frag.appendChild(row);
+      }
+
+      inner.appendChild(frag);
+
+      // Hover effect
+      inner.addEventListener('mouseover', (e) => {
+        const cell = e.target.closest('.bb-cell');
+        if (!cell) return;
+        cell.classList.remove('fading');
+        cell.style.backgroundColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+      });
+
+      inner.addEventListener('mouseout', (e) => {
+        const cell = e.target.closest('.bb-cell');
+        if (!cell) return;
+        cell.classList.add('fading');
+        cell.style.backgroundColor = 'transparent';
+      });
+    })();
+  </script>
 </body>
 </html>
