@@ -17,7 +17,7 @@
       overflow-x: hidden;
     }
 
-    #particle-bg {
+    #signal-bg {
       position: fixed;
       inset: 0;
       z-index: 0;
@@ -136,7 +136,7 @@
   </style>
 </head>
 <body>
-  <canvas id="particle-bg"></canvas>
+  <canvas id="signal-bg"></canvas>
   <div class="container">
     <header class="header">
       <div class="logo">
@@ -240,100 +240,205 @@
   <div id="toast"></div>
   <script src="/assets/app.js"></script>
   <script>
-    (function () {
-      // ── Perlin noise ──────────────────────────────────────────────────────────
-      const perm = [151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,142,8,99,37,240,21,10,23,190,6,148,247,120,234,75,0,26,197,62,94,252,219,203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,125,136,171,168,68,175,74,165,71,134,139,48,27,166,77,146,158,231,83,111,229,122,60,211,133,230,220,105,92,41,55,46,245,40,244,102,143,54,65,25,63,161,1,216,80,73,209,76,132,187,208,89,18,169,200,196,135,130,116,188,159,86,164,100,109,198,173,186,3,64,52,217,226,250,124,123,5,202,38,147,118,126,255,82,85,212,207,206,59,227,47,16,58,17,182,189,28,42,223,183,170,213,119,248,152,2,44,154,163,70,221,153,101,155,167,43,172,9,129,22,39,253,19,98,108,110,79,113,224,232,178,185,112,104,218,246,97,228,251,34,242,193,238,210,144,12,191,179,162,241,81,51,145,235,249,14,239,107,49,192,214,31,181,199,106,157,184,84,204,176,115,121,50,45,127,4,150,254,138,236,205,93,222,114,67,29,24,72,243,141,128,195,78,66,215,61,156,180];
-      const p = new Array(512);
-      for (let i = 0; i < 256; i++) p[256 + i] = p[i] = perm[i];
+  (function () {
+    const canvas = document.getElementById('signal-bg');
+    const ctx = canvas.getContext('2d');
 
-      function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
-      function lerp(t, a, b) { return a + t * (b - a); }
-      function grad(hash, x, y, z) {
-        const h = hash & 15, u = h < 8 ? x : y;
-        const v = h < 4 ? y : (h === 12 || h === 14 ? x : z);
-        return ((h & 1) === 0 ? u : -u) + ((h & 2) === 0 ? v : -v);
-      }
-      function noise3(x, y, z) {
-        const X = Math.floor(x) & 255, Y = Math.floor(y) & 255, Z = Math.floor(z) & 255;
-        x -= Math.floor(x); y -= Math.floor(y); z -= Math.floor(z);
-        const u = fade(x), v = fade(y), w = fade(z);
-        const A = p[X]+Y, AA = p[A]+Z, AB = p[A+1]+Z, B = p[X+1]+Y, BA = p[B]+Z, BB = p[B+1]+Z;
-        return lerp(w,
-          lerp(v, lerp(u, grad(p[AA],x,y,z),   grad(p[BA],x-1,y,z)),
-                  lerp(u, grad(p[AB],x,y-1,z),  grad(p[BB],x-1,y-1,z))),
-          lerp(v, lerp(u, grad(p[AA+1],x,y,z-1),grad(p[BA+1],x-1,y,z-1)),
-                  lerp(u, grad(p[AB+1],x,y-1,z-1),grad(p[BB+1],x-1,y-1,z-1))));
-      }
+    // ── Config ────────────────────────────────────────────────────────────────
+    const NODE_COUNT   = 72;
+    const CONNECT_DIST = 160;
+    const MOUSE_REPEL  = 120;
+    const SPEED        = 0.4;
+    const NODE_R       = 2.2;
+    const PULSE_SPEED  = 3.5;   // px per frame
+    const PULSE_MAX    = 340;   // max radius before fade
+    const INDIGO = [99, 102, 241];
+    const CYAN   = [34, 211, 238];
 
-      // ── Canvas setup ──────────────────────────────────────────────────────────
-      const canvas = document.getElementById('particle-bg');
-      const ctx = canvas.getContext('2d', { alpha: true });
+    // ── State ─────────────────────────────────────────────────────────────────
+    let W, H;
+    let mouse = { x: -9999, y: -9999 };
+    let pulses = [];  // { x, y, r, alpha }
+    let nodes  = [];
 
-      const PARTICLE_COUNT = 2000;
-      const NOISE_INTENSITY = 0.003;
-      const SIZE_MIN = 0.5, SIZE_MAX = 2;
+    function resize() {
+      W = canvas.width  = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
 
-      let particles = [];
+    // ── Nodes ─────────────────────────────────────────────────────────────────
+    function makeNode() {
+      const angle = Math.random() * Math.PI * 2;
+      const spd   = (0.3 + Math.random() * 0.7) * SPEED;
+      return {
+        x:  Math.random() * W,
+        y:  Math.random() * H,
+        vx: Math.cos(angle) * spd,
+        vy: Math.sin(angle) * spd,
+        pulse: 0,          // local glow intensity 0→1
+        pulseDir: 1,
+      };
+    }
+    for (let i = 0; i < NODE_COUNT; i++) nodes.push(makeNode());
 
-      function resize() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-      }
-      window.addEventListener('resize', resize);
-      resize();
+    // ── Mouse ─────────────────────────────────────────────────────────────────
+    window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+    window.addEventListener('touchmove', e => {
+      mouse.x = e.touches[0].clientX;
+      mouse.y = e.touches[0].clientY;
+    }, { passive: true });
+    window.addEventListener('mouseleave', () => { mouse.x = -9999; mouse.y = -9999; });
 
-      function makeParticle() {
-        return {
-          x: Math.random() * canvas.width,
-          y: Math.random() * canvas.height,
-          size: Math.random() * (SIZE_MAX - SIZE_MIN) + SIZE_MIN,
-          vx: 0, vy: 0,
-          life: Math.random() * 100,
-          maxLife: 100 + Math.random() * 50,
-        };
-      }
+    // Click / tap → ripple pulse
+    function spawnPulse(x, y) {
+      pulses.push({ x, y, r: 0, alpha: 1 });
+    }
+    window.addEventListener('click',     e => spawnPulse(e.clientX, e.clientY));
+    window.addEventListener('touchstart', e => spawnPulse(e.touches[0].clientX, e.touches[0].clientY), { passive: true });
 
-      for (let i = 0; i < PARTICLE_COUNT; i++) particles.push(makeParticle());
+    // ── Color helpers ─────────────────────────────────────────────────────────
+    function lerpColor(a, b, t) {
+      return [
+        Math.round(a[0] + (b[0] - a[0]) * t),
+        Math.round(a[1] + (b[1] - a[1]) * t),
+        Math.round(a[2] + (b[2] - a[2]) * t),
+      ];
+    }
+    function rgba(c, a) { return `rgba(${c[0]},${c[1]},${c[2]},${a.toFixed(3)})`; }
 
-      function animate() {
-        // Dark mode trail: semi-transparent dark fill
-        ctx.fillStyle = 'rgba(10, 10, 15, 0.12)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // ── Mouse cursor glow ─────────────────────────────────────────────────────
+    function drawMouseGlow() {
+      if (mouse.x < 0) return;
+      const g = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, MOUSE_REPEL * 1.4);
+      g.addColorStop(0,   'rgba(99,102,241,0.18)');
+      g.addColorStop(0.5, 'rgba(34,211,238,0.07)');
+      g.addColorStop(1,   'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(mouse.x, mouse.y, MOUSE_REPEL * 1.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
 
-        const t = Date.now() * 0.0001;
+    // ── Main loop ─────────────────────────────────────────────────────────────
+    function frame() {
+      ctx.clearRect(0, 0, W, H);
 
-        for (const p of particles) {
-          p.life += 1;
-          if (p.life > p.maxLife) {
-            p.life = 0;
-            p.x = Math.random() * canvas.width;
-            p.y = Math.random() * canvas.height;
-          }
+      // Mouse glow
+      drawMouseGlow();
 
-          const opacity = Math.sin((p.life / p.maxLife) * Math.PI) * 0.15;
-          const n = noise3(p.x * NOISE_INTENSITY, p.y * NOISE_INTENSITY, t);
-          const angle = n * Math.PI * 4;
-          p.vx = Math.cos(angle) * 2;
-          p.vy = Math.sin(angle) * 2;
-          p.x += p.vx;
-          p.y += p.vy;
+      // ── Update & draw connections ─────────────────────────────────────────
+      for (let i = 0; i < nodes.length; i++) {
+        for (let j = i + 1; j < nodes.length; j++) {
+          const a = nodes[i], b = nodes[j];
+          const dx = b.x - a.x, dy = b.y - a.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > CONNECT_DIST) continue;
 
-          if (p.x < 0) p.x = canvas.width;
-          if (p.x > canvas.width) p.x = 0;
-          if (p.y < 0) p.y = canvas.height;
-          if (p.y > canvas.height) p.y = 0;
+          const t    = dist / CONNECT_DIST;         // 0=close 1=far
+          const fade = 1 - t;                        // opacity
 
-          ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+          // Color interpolates indigo→cyan along canvas x axis
+          const cx = (a.x + b.x) / 2 / W;
+          const col = lerpColor(INDIGO, CYAN, cx);
+
+          // Brighten connections near mouse
+          const mdx = mouse.x - (a.x + b.x) / 2;
+          const mdy = mouse.y - (a.y + b.y) / 2;
+          const mdist = Math.sqrt(mdx * mdx + mdy * mdy);
+          const boost = mdist < MOUSE_REPEL * 2 ? 0.5 * (1 - mdist / (MOUSE_REPEL * 2)) : 0;
+
+          ctx.strokeStyle = rgba(col, Math.min(1, fade * 0.55 + boost));
+          ctx.lineWidth   = fade * 1.2 + boost * 0.6;
           ctx.beginPath();
-          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.moveTo(a.x, a.y);
+          ctx.lineTo(b.x, b.y);
+          ctx.stroke();
+        }
+      }
+
+      // ── Update & draw nodes ───────────────────────────────────────────────
+      for (const n of nodes) {
+        // Drift
+        n.x += n.vx;
+        n.y += n.vy;
+
+        // Bounce on edges
+        if (n.x < 0)  { n.x = 0;  n.vx *= -1; }
+        if (n.x > W)  { n.x = W;  n.vx *= -1; }
+        if (n.y < 0)  { n.y = 0;  n.vy *= -1; }
+        if (n.y > H)  { n.y = H;  n.vy *= -1; }
+
+        // Mouse repulsion
+        const dx = n.x - mouse.x, dy = n.y - mouse.y;
+        const md = Math.sqrt(dx * dx + dy * dy);
+        if (md < MOUSE_REPEL) {
+          const force = (1 - md / MOUSE_REPEL) * 1.8;
+          n.vx += (dx / md) * force * 0.12;
+          n.vy += (dy / md) * force * 0.12;
+          // Clamp speed
+          const spd = Math.sqrt(n.vx * n.vx + n.vy * n.vy);
+          if (spd > SPEED * 4) { n.vx = n.vx / spd * SPEED * 4; n.vy = n.vy / spd * SPEED * 4; }
         }
 
-        requestAnimationFrame(animate);
+        // Gentle friction to avoid drift build-up
+        n.vx *= 0.998;
+        n.vy *= 0.998;
+
+        // Ambient pulse flicker
+        n.pulse += 0.025 * n.pulseDir;
+        if (n.pulse > 1) { n.pulse = 1; n.pulseDir = -1; }
+        if (n.pulse < 0) { n.pulse = 0; n.pulseDir = 1; }
+
+        // Draw node
+        const cx = n.x / W;
+        const col = lerpColor(INDIGO, CYAN, cx);
+        const glow = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, NODE_R * 5);
+        glow.addColorStop(0,   rgba(col, 0.5 + n.pulse * 0.4));
+        glow.addColorStop(0.4, rgba(col, 0.15));
+        glow.addColorStop(1,   rgba(col, 0));
+        ctx.fillStyle = glow;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, NODE_R * 5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = rgba(col, 0.85 + n.pulse * 0.15);
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, NODE_R, 0, Math.PI * 2);
+        ctx.fill();
       }
 
-      animate();
-    })();
+      // ── Ripple pulses ─────────────────────────────────────────────────────
+      for (let i = pulses.length - 1; i >= 0; i--) {
+        const pu = pulses[i];
+        pu.r += PULSE_SPEED;
+        pu.alpha = (1 - pu.r / PULSE_MAX) * 0.8;
+
+        if (pu.alpha <= 0) { pulses.splice(i, 1); continue; }
+
+        // Outer ring
+        ctx.strokeStyle = `rgba(99,102,241,${pu.alpha.toFixed(3)})`;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(pu.x, pu.y, pu.r, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Inner ring (offset)
+        if (pu.r > 30) {
+          ctx.strokeStyle = `rgba(34,211,238,${(pu.alpha * 0.5).toFixed(3)})`;
+          ctx.lineWidth = 0.8;
+          ctx.beginPath();
+          ctx.arc(pu.x, pu.y, pu.r - 30, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+
+      requestAnimationFrame(frame);
+    }
+
+    requestAnimationFrame(frame);
+  })();
   </script>
 </body>
 </html>
